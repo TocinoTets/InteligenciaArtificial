@@ -2,11 +2,7 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Objeto de interés generado por el NPC Cazador durante el estado Patrol.
-    /// Los agentes Boid se dirigen hacia él con Arrive y, al llegar, lo golpean
-    /// reduciéndole la vida hasta destruirlo.
-    /// </summary>
+
     public class InterestObject : MonoBehaviour
     {
         [SerializeField] private float maxHealth = 100f;
@@ -20,7 +16,6 @@ namespace IA.Agents
         public float CurrentHealth { get; private set; }
         public float HealthNormalized => maxHealth <= 0f ? 0f : Mathf.Clamp01(CurrentHealth / maxHealth);
 
-        /// <summary>El objeto sigue disponible para ser consumido por un Boid.</summary>
         public bool IsAvailable => CurrentHealth > 0f;
 
         private void Awake()
@@ -36,7 +31,6 @@ namespace IA.Agents
             if (age >= lifetime) Destroy(gameObject);
         }
 
-        /// <summary>Reduce la vida del objeto. Devuelve true si quedó destruido.</summary>
         public bool ApplyDamage(float amount)
         {
             if (!IsAvailable) return false;
@@ -49,7 +43,6 @@ namespace IA.Agents
                 return true;
             }
 
-            // Feedback funcional: el objeto se encoge a medida que pierde vida.
             transform.localScale = initialScale * Mathf.Lerp(0.45f, 1f, HealthNormalized);
             return false;
         }

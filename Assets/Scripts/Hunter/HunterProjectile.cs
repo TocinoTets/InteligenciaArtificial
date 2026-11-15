@@ -2,7 +2,6 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>Proyectil del ataque a distancia del NPC Cazador (estado Attack).</summary>
     public class HunterProjectile : MonoBehaviour
     {
         [SerializeField] private float hitRadius = 0.7f;
@@ -10,14 +9,14 @@ namespace IA.Agents
 
         private BoidAgent target;
         private float speed = 18f;
-        private float damage = 15f;
+        private int hits = 1;
         private float life;
 
-        public void Initialize(BoidAgent newTarget, float newSpeed, float newDamage)
+        public void Initialize(BoidAgent newTarget, float newSpeed, int newHits)
         {
             target = newTarget;
             speed = newSpeed;
-            damage = newDamage;
+            hits = newHits;
             life = 0f;
         }
 
@@ -37,12 +36,9 @@ namespace IA.Agents
             float distance = toTarget.magnitude;
             float step = speed * dt;
 
-            // El desplazamiento de este frame se compara con la distancia que falta: si el
-            // paso alcanza el radio de impacto el golpe se resuelve igualmente. Comprobar sólo
-            // la distancia actual dejaba atravesar al boid sin efecto cuando el paso era grande.
             if (distance - step <= hitRadius)
             {
-                target.TakeDamage(damage, "ataque a distancia");
+                target.TakeHits(hits);
                 Destroy(gameObject);
                 return;
             }

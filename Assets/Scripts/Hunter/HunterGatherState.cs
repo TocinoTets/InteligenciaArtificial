@@ -2,18 +2,11 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Estado Gather: se alcanza cuando el Cazador detecta un Boid eliminado dentro de
-    /// su rango de percepción. Se dirige a él, ejecuta la recolección durante un tiempo
-    /// determinado y el agente recolectado desaparece.
-    /// Si el objetivo deja de estar disponible antes de completar la recolección,
-    /// abandona la acción y vuelve al comportamiento correspondiente (Patrol).
-    /// </summary>
     public class HunterGatherState : HunterState
     {
         private BoidAgent target;
         private float collectTimer;
-        private bool collecting;
+        private bool completed;
 
         public HunterGatherState(HunterNPC npc) : base(npc) { }
 
@@ -21,66 +14,51 @@ namespace IA.Agents
 
         public override void Enter()
         {
-            collectTimer = 0f;
-            collecting = false;
             target = npc.DetectedDeadBoid;
-            npc.ActionProgress = 0f;
-
-            if (target == null)
-            {
-                Log("Gather: sin agente eliminado disponible");
-                npc.FSM.ChangeState(HunterStateId.Patrol);
-                return;
-            }
-
-            Log($"Gather: agente eliminado detectado {target.name} → se dirige a recolectarlo");
+            completed = false;
+            ResetCollection();
         }
 
-        public override void Tick(float deltaTime)
+        public override void Exit()
         {
-            if (target == null || !target.IsHarvestable)
-            {
-                Log("Gather: el objetivo dejó de estar disponible → abandona la recolección");
-                npc.ActionProgress = 0f;
-                npc.FSM.ChangeState(HunterStateId.Patrol);
-                return;
-            }
+            target = null;
+            ResetCollection();
+        }
 
-            float distance = AgentMath.FlatDistance(npc.Position, target.transform.position);
+        public override bool TryGetTransition(out HunterStateId next)
+        {
+            if (completed) return GoTo(HunterStateId.Patrol, out next);
+            if (target == null || !target.IsHarvestable) return GoTo(HunterStateId.Patrol, out next);
+            return Stay(out next);
+        }
 
-            if (distance > npc.GatherRadius)
+        public override void Execute(float deltaTime)
+        {
+            if (!npc.HasReached(target.Position, npc.GatherRadius))
             {
-                collecting = false;
-                npc.ActionProgress = 0f;
-                npc.MoveTowards(target.transform.position);
+                ResetCollection();
+                npc.MoveTowards(target.Position);
                 return;
             }
 
             npc.StopMoving();
+            Collect(deltaTime);
+        }
 
-            if (!collecting)
-            {
-                collecting = true;
-                collectTimer = 0f;
-                Log($"Gather: iniciando recolección de {target.name} ({npc.GatherDuration:0.#} s)");
-            }
-
+        private void Collect(float deltaTime)
+        {
             collectTimer += deltaTime;
             npc.ActionProgress = Mathf.Clamp01(collectTimer / Mathf.Max(0.01f, npc.GatherDuration));
 
             if (collectTimer < npc.GatherDuration) return;
 
-            BoidAgent harvested = target;
-            harvested.Harvest();
-            npc.ActionProgress = 0f;
-            Log($"Gather: {harvested.name} recolectado → desaparece del escenario");
-
-            npc.FSM.ChangeState(HunterStateId.Patrol);
+            target.Harvest();
+            completed = true;
         }
 
-        public override void Exit()
+        private void ResetCollection()
         {
-            collecting = false;
+            collectTimer = 0f;
             npc.ActionProgress = 0f;
         }
     }

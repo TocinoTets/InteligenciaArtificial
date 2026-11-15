@@ -2,7 +2,6 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>Utilidades de steering compartidas por los agentes (trabajan en el plano XZ).</summary>
     public static class AgentMath
     {
         public static float FlatDistance(Vector3 a, Vector3 b)

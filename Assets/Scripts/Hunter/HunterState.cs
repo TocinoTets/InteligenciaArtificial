@@ -1,9 +1,5 @@
 namespace IA.Agents
 {
-    /// <summary>
-    /// Estado de la FSM del Cazador. Cada estado concreto decide sus propias
-    /// transiciones (llamando a npc.FSM.ChangeState) además de su comportamiento.
-    /// </summary>
     public abstract class HunterState
     {
         protected readonly HunterNPC npc;
@@ -17,13 +13,22 @@ namespace IA.Agents
 
         public virtual void Enter() { }
 
-        public abstract void Tick(float deltaTime);
-
         public virtual void Exit() { }
 
-        protected void Log(string action)
+        public abstract bool TryGetTransition(out HunterStateId next);
+
+        public abstract void Execute(float deltaTime);
+
+        protected bool Stay(out HunterStateId next)
         {
-            npc.LogAction(action);
+            next = Id;
+            return false;
+        }
+
+        protected static bool GoTo(HunterStateId target, out HunterStateId next)
+        {
+            next = target;
+            return true;
         }
     }
 }

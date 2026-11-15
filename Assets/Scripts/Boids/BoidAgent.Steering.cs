@@ -2,18 +2,45 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Actuadores del boid: composición de fuerzas de steering, traslación con wrap en la
-    /// arena, corrección dura anti-superposición y orientación hacia la velocidad.
-    /// </summary>
     public partial class BoidAgent
     {
-        // ---------------- actuadores (steering) ----------------
-        private void ApplySteering(float dt)
-        {
-            Vector3 acceleration = ComputeSteering(dt);
+        private int wrapCount;
 
-            velocity += acceleration * dt;
+        public int WrapCount => wrapCount;
+
+        internal void StepFlocking(float dt)
+        {
+            Vector3 steering = Separation(separationRadius) * separationWeight
+                              + Alignment() * alignmentWeight
+                              + Cohesion() * cohesionWeight
+                              + Wander(dt) * wanderWeight
+                              + SeparationFromDead() * (separationWeight * 0.6f);
+
+            Integrate(Vector3.ClampMagnitude(steering, maxForce), dt);
+        }
+
+        internal void StepEvading(float dt)
+        {
+            Vector3 steering = Evade() * evadeWeight
+                              + Separation(separationRadius) * separationWeight
+                              + SeparationFromDead() * (separationWeight * 0.6f);
+
+            Integrate(Vector3.ClampMagnitude(steering, maxForce), dt);
+        }
+
+        internal void StepTowardsInterest(float dt)
+        {
+            Vector3 steering = Separation(separationRadius) * separationWeight
+                              + SeparationFromDead() * (separationWeight * 0.6f);
+
+            if (targetInterest != null) steering += Arrive(targetInterest.transform.position) * arriveWeight;
+
+            Integrate(Vector3.ClampMagnitude(steering, maxForce), dt);
+        }
+
+        private void Integrate(Vector3 steering, float dt)
+        {
+            velocity += steering * dt;
             velocity = AgentMath.Flat(velocity);
             if (velocity.magnitude > maxSpeed) velocity = velocity.normalized * maxSpeed;
 
@@ -22,37 +49,17 @@ namespace IA.Agents
             transform.position = position;
 
             FaceVelocity(dt);
+            ResolveOverlaps();
         }
 
-        private Vector3 ComputeSteering(float dt)
+        internal void RefreshThreatMemory(Vector3 threatPosition)
         {
-            Vector3 steering = Vector3.zero;
-
-            switch (state)
-            {
-                case BoidState.Evading:
-                    steering += Evade() * evadeWeight;
-                    // La separación se mantiene siempre: nunca debe haber superposición.
-                    steering += Separation(separationRadius) * separationWeight;
-                    break;
-
-                case BoidState.Flocking:
-                    steering += Separation(separationRadius) * separationWeight;
-                    steering += Alignment() * alignmentWeight;
-                    steering += Cohesion() * cohesionWeight;
-                    steering += Wander(dt) * wanderWeight;
-                    break;
-
-                default: // Arriving / Interacting
-                    steering += Separation(separationRadius) * separationWeight;
-                    if (targetInterest != null) steering += Arrive(targetInterest.transform.position) * arriveWeight;
-                    break;
-            }
-
-            steering += SeparationFromDead() * (separationWeight * 0.6f);
-
-            return Vector3.ClampMagnitude(steering, maxForce);
+            lastThreatPosition = threatPosition;
+            evadeMemoryTimer = evadeMemoryDuration;
         }
+
+        internal void TickThreatMemory(float dt) => evadeMemoryTimer = Mathf.Max(0f, evadeMemoryTimer - dt);
+        internal bool HasThreatMemory => evadeMemoryTimer > 0f;
 
         private Vector3 SteerTo(Vector3 desired)
         {
@@ -130,20 +137,14 @@ namespace IA.Agents
             return SteerTo(desired);
         }
 
-        /// <summary>Evade: huye de la posición futura estimada del Cazador (persecución anticipada).</summary>
         private Vector3 Evade()
         {
-            // Con el Cazador a la vista se usan su posición y velocidad reales; si ya salió
-            // del rango de visión se sigue huyendo del último punto donde fue detectado.
             Vector3 threatPosition = detectedHunter != null ? detectedHunter.transform.position : lastThreatPosition;
             Vector3 threatVelocity = detectedHunter != null ? detectedHunter.Velocity : Vector3.zero;
 
             Vector3 toThreat = AgentMath.Flat(threatPosition - transform.position);
             float distance = toThreat.magnitude;
 
-            // Distancia de seguridad: la huida se desvanece al alejarse y se apaga bastante antes
-            // de la barrera. Así el boid no sigue empujando contra el borde (y, tras el teletransporte
-            // del wrap, continúa hacia dentro de la arena en vez de girar y volver a cruzar).
             float safeDistance = Mathf.Max(viewRadius + 0.01f, evadeSafeDistance);
             if (distance >= safeDistance) return Vector3.zero;
 
@@ -158,7 +159,6 @@ namespace IA.Agents
             return SteerTo(away * (maxSpeed * speedFactor));
         }
 
-        /// <summary>Arrive: se aproxima al objetivo frenando según la distancia, sin superponerse con él.</summary>
         private Vector3 Arrive(Vector3 target)
         {
             Vector3 offset = AgentMath.Flat(target - transform.position);
@@ -179,24 +179,21 @@ namespace IA.Agents
             return SteerTo(direction * (maxSpeed * 0.6f));
         }
 
-        /// <summary>
-        /// La arena es la barrera que define los límites del mapa: al tocar uno de sus
-        /// bordes el boid se transporta al lado opuesto conservando la otra coordenada.
-        /// </summary>
         private Vector3 WrapAroundArena(Vector3 position)
         {
             float span = arenaHalfExtent * 2f;
+            bool wrapped = false;
 
-            if (position.x > arenaHalfExtent) position.x -= span;
-            else if (position.x < -arenaHalfExtent) position.x += span;
+            if (position.x > arenaHalfExtent) { position.x -= span; wrapped = true; }
+            else if (position.x < -arenaHalfExtent) { position.x += span; wrapped = true; }
 
-            if (position.z > arenaHalfExtent) position.z -= span;
-            else if (position.z < -arenaHalfExtent) position.z += span;
+            if (position.z > arenaHalfExtent) { position.z -= span; wrapped = true; }
+            else if (position.z < -arenaHalfExtent) { position.z += span; wrapped = true; }
 
+            if (wrapped) wrapCount++;
             return position;
         }
 
-        /// <summary>Corrección posicional dura: garantiza que ningún par de agentes se superponga.</summary>
         private void ResolveOverlaps()
         {
             Vector3 correction = Vector3.zero;

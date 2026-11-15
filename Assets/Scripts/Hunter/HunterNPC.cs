@@ -1,25 +1,9 @@
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// NPC Cazador.
-    ///
-    /// Todo su comportamiento está gestionado por una Máquina de Estados Finita
-    /// (HunterFSM): Patrol, Attack y Gather. Este componente sólo aporta sensores
-    /// (percepción limitada por radio), actuadores (movimiento y ataques) y las
-    /// variables de contexto. Ninguna transición se dispara desde aquí: cada estado
-    /// evalúa sus condiciones y llama a FSM.ChangeState.
-    ///
-    /// El componente se reparte en archivos parciales:
-    ///   HunterNPC.Sensing.cs  → percepción local de boids
-    ///   HunterNPC.Motion.cs   → movimiento y orientación
-    ///   HunterNPC.Combat.cs   → ataques cuerpo a cuerpo y a distancia
-    ///   HunterNPC.Spawning.cs → objetos de interés generados en Patrol
-    ///   HunterNPC.Feedback.cs → feedback visual, etiqueta de depuración y gizmos
-    /// </summary>
     [RequireComponent(typeof(Collider))]
     public partial class HunterNPC : MonoBehaviour
     {
@@ -28,31 +12,47 @@ namespace IA.Agents
         [Header("Variables obligatorias")]
         [Tooltip("TBA - Time Between Attacks: tiempo mínimo entre ataques (segundos).")]
         [SerializeField] private float tba = 3f;
-        [Tooltip("RangeAttackRadius: distancia máxima para realizar un ataque a distancia.")]
+        [Tooltip("RangeAttackRadius: distancia máxima para un ataque a distancia (1 golpe).")]
         [SerializeField] private float rangeAttackRadius = 12f;
-        [Tooltip("MeleeAttackRadius: distancia máxima para realizar un ataque cuerpo a cuerpo.")]
+        [Tooltip("MeleeAttackRadius: distancia máxima para un ataque cuerpo a cuerpo (2 golpes). Menor que RangeAttackRadius.")]
         [SerializeField] private float meleeAttackRadius = 2.6f;
+        [Tooltip("VisionRadius: rango de percepción para detectar Boids vivos y eliminados.")]
+        [FormerlySerializedAs("perceptionRadius")]
+        [SerializeField] private float visionRadius = 18f;
+        [Tooltip("MaxEnergy: energía máxima del Cazador.")]
+        [SerializeField] private float maxEnergy = 100f;
+        [Tooltip("Energy: energía actual del Cazador. Al iniciar se llena hasta MaxEnergy.")]
+        [SerializeField] private float energy = 100f;
 
-        [Header("Percepción (limitada por radio)")]
-        [SerializeField] private float perceptionRadius = 18f;
+        [Header("Energía")]
+        [Tooltip("Energía que consume por segundo mientras está en Hunt.")]
+        [SerializeField] private float huntEnergyDrainPerSecond = 8f;
+        [Tooltip("Energía que recarga por segundo mientras está en Rest.")]
+        [SerializeField] private float restEnergyRechargePerSecond = 25f;
 
         [Header("Movimiento")]
         [SerializeField] private float moveSpeed = 6f;
         [SerializeField] private float acceleration = 16f;
+        [Tooltip("Multiplicador de la aceleración al frenar.")]
+        [SerializeField] private float brakeMultiplier = 1.4f;
         [SerializeField] private float turnSpeed = 7f;
+        [Tooltip("Máximo de segundos que Pursuit anticipa la posición futura de la presa.")]
+        [SerializeField] private float pursuitMaxPrediction = 1.5f;
 
         [Header("Patrol: waypoints")]
         [SerializeField] private Transform[] waypoints;
         [SerializeField] private float waypointTolerance = 1.2f;
         [SerializeField] private WaypointLoopMode loopMode = WaypointLoopMode.PingPong;
 
-        [Header("Attack")]
-        [Tooltip("Tiempo de anticipación antes de concretar el golpe.")]
-        [SerializeField] private float attackWindup = 0.45f;
-        [Tooltip("Distancia a la que se detiene para golpear cuerpo a cuerpo.")]
+        [Header("Hunt")]
+        [Tooltip("Distancia a la que se detiene frente a la presa.")]
         [SerializeField] private float meleeStopDistance = 1.7f;
-        [SerializeField] private float meleeDamage = 34f;
-        [SerializeField] private float rangedDamage = 20f;
+        [Tooltip("Distancia para considerar alcanzada la última posición conocida de la presa.")]
+        [SerializeField] private float lastKnownPositionTolerance = 1f;
+        [Tooltip("Golpes que aplica el ataque cuerpo a cuerpo.")]
+        [SerializeField] private int meleeHits = 2;
+        [Tooltip("Golpes que aplica el ataque a distancia.")]
+        [SerializeField] private int rangedHits = 1;
         [SerializeField] private GameObject projectilePrefab;
         [SerializeField] private float projectileSpeed = 18f;
 
@@ -71,18 +71,15 @@ namespace IA.Agents
         [SerializeField] private float arenaHalfExtent = 22f;
 
         [Header("Feedback visual")]
-        [SerializeField] private bool showDebugInfo = false;
         [SerializeField] private bool showDebugLines = true;
         [SerializeField] private Color patrolColor = new Color(0.25f, 0.7f, 1f);
-        [SerializeField] private Color attackColor = new Color(1f, 0.15f, 0.15f);
+        [FormerlySerializedAs("attackColor")]
+        [SerializeField] private Color huntColor = new Color(1f, 0.15f, 0.15f);
         [SerializeField] private Color gatherColor = new Color(0.85f, 0.3f, 0.95f);
+        [SerializeField] private Color restColor = new Color(1f, 0.85f, 0.2f);
 
-        // ---------------- estado interno ----------------
         private readonly List<BoidAgent> detectedBoids = new List<BoidAgent>(16);
-        private readonly List<string> recentActions = new List<string>(6);
         private readonly Collider[] overlapBuffer = new Collider[64];
-        private readonly AgentLabel label = new AgentLabel();
-        private readonly StringBuilder textBuilder = new StringBuilder(320);
 
         private HunterFSM fsm;
         private Collider bodyCollider;
@@ -102,15 +99,18 @@ namespace IA.Agents
         private static readonly int ColorId = Shader.PropertyToID("_Color");
 
         public HunterFSM FSM => fsm;
+        public HunterStateId State => fsm.CurrentId;
         public Vector3 Position => transform.position;
         public Vector3 Velocity => velocity;
 
         public float TBA => tba;
         public float RangeAttackRadius => rangeAttackRadius;
         public float MeleeAttackRadius => meleeAttackRadius;
-        public float PerceptionRadius => perceptionRadius;
-        public float AttackWindup => attackWindup;
+        public float VisionRadius => visionRadius;
+        public float Energy => energy;
+        public float MaxEnergy => maxEnergy;
         public float MeleeStopDistance => meleeStopDistance;
+        public float LastKnownPositionTolerance => lastKnownPositionTolerance;
         public float GatherDuration => gatherDuration;
         public float GatherRadius => gatherRadius;
         public float InterestSpawnInterval => interestSpawnInterval;
@@ -125,13 +125,8 @@ namespace IA.Agents
         public float AttackTimer => attackTimer;
         public bool IsAttackReady => attackTimer >= tba;
 
-        /// <summary>Progreso (0-1) de la acción en curso, usado por el feedback visual.</summary>
         public float ActionProgress { get; set; }
 
-        public string LastAction { get; private set; } = "-";
-        public IReadOnlyList<string> RecentActions => recentActions;
-
-        /// <summary>Configuración aplicada por el generador de escena.</summary>
         public void Configure(Transform[] newWaypoints, GameObject newInterestObjectPrefab, GameObject newProjectilePrefab, float newArenaHalfExtent)
         {
             waypoints = newWaypoints;
@@ -148,28 +143,44 @@ namespace IA.Agents
             materialProperties = new MaterialPropertyBlock();
             groundY = transform.position.y;
             baseScale = transform.localScale;
+            energy = maxEnergy;
+            attackTimer = 0f;
 
-            fsm = new HunterFSM(this);
+            fsm = new HunterFSM();
             fsm.Register(new HunterPatrolState(this));
-            fsm.Register(new HunterAttackState(this));
+            fsm.Register(new HunterHuntState(this));
             fsm.Register(new HunterGatherState(this));
-
-            attackTimer = 0f; // el TBA debe cumplirse antes del primer ataque
-            fsm.ChangeState(HunterStateId.Patrol);
+            fsm.Register(new HunterRestState(this));
+            fsm.Start(HunterStateId.Patrol);
         }
 
         private void Update()
         {
             float dt = Time.deltaTime;
 
-            attackTimer += dt;
-            meleePulse = Mathf.Max(0f, meleePulse - dt);
+            TickAttackTimer(dt);
+            TickMeleePulse(dt);
 
             Sense();
-            fsm.Tick(dt); // las transiciones viven dentro de los estados de la FSM
+            fsm.Tick(dt);
 
             UpdateVisual();
             DrawDebugLines();
+        }
+
+        private void OnValidate()
+        {
+            tba = Mathf.Max(0f, tba);
+            rangeAttackRadius = Mathf.Max(0.2f, rangeAttackRadius);
+            meleeAttackRadius = Mathf.Clamp(meleeAttackRadius, 0.1f, rangeAttackRadius - 0.1f);
+            visionRadius = Mathf.Max(0.1f, visionRadius);
+            maxEnergy = Mathf.Max(1f, maxEnergy);
+            energy = Mathf.Clamp(energy, 0f, maxEnergy);
+            huntEnergyDrainPerSecond = Mathf.Max(0f, huntEnergyDrainPerSecond);
+            restEnergyRechargePerSecond = Mathf.Max(0.01f, restEnergyRechargePerSecond);
+            meleeStopDistance = Mathf.Clamp(meleeStopDistance, 0.1f, meleeAttackRadius);
+            meleeHits = Mathf.Max(1, meleeHits);
+            rangedHits = Mathf.Max(1, rangedHits);
         }
     }
 }

@@ -1,28 +1,26 @@
 namespace IA.Agents
 {
-    /// <summary>
-    /// Estados locales de un agente Boid.
-    /// La consigna los declara OPCIONALES: se usan sólo para organizar el comportamiento
-    /// del propio agente (no hay coordinación entre agentes ni controlador global).
-    /// </summary>
-    public enum BoidState
+    public abstract class BoidState
     {
-        /// <summary>Separation + Alignment + Cohesion.</summary>
-        Flocking,
+        protected readonly BoidAgent boid;
 
-        /// <summary>Evade al NPC Cazador detectado dentro del rango de visión (prioridad sobre flocking).</summary>
-        Evading,
+        protected BoidState(BoidAgent boid)
+        {
+            this.boid = boid;
+        }
 
-        /// <summary>Arrive hacia el objeto de interés: se acerca sin superponerse con él.</summary>
-        Arriving,
+        public abstract BoidStateId Id { get; }
 
-        /// <summary>Interactúa con el objeto de interés reduciéndole la vida.</summary>
-        Interacting,
+        public virtual void Enter() { }
+        public abstract void Tick(float deltaTime);
+        public virtual void Exit() { }
 
-        /// <summary>Vida 0: queda inactivo en el lugar donde fue eliminado, sin desplazarse.</summary>
-        Dead,
-
-        /// <summary>Recolectado por el Cazador: desaparece y reaparece luego en una posición aleatoria.</summary>
-        Respawning
+        protected bool TryEvade()
+        {
+            if (boid.DetectedHunter == null) return false;
+            boid.RefreshThreatMemory(boid.DetectedHunter.transform.position);
+            boid.FSM.ChangeState(BoidStateId.Evading);
+            return true;
+        }
     }
 }

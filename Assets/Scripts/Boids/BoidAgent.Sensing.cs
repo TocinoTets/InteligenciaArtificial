@@ -2,14 +2,9 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Sensores locales del boid y decisión de estado. No hay coordinación global:
-    /// todo lo que el agente sabe proviene de una única consulta de física sobre sus
-    /// propios radios.
-    /// </summary>
+
     public partial class BoidAgent
     {
-        // ---------------- sensores ----------------
         private void Sense()
         {
             neighbors.Clear();
@@ -66,53 +61,7 @@ namespace IA.Agents
             }
         }
 
-        // ---------------- decisión (local, sin coordinación) ----------------
-        private void UpdateState(float dt)
-        {
-            BoidState previous = state;
-
-            if (detectedHunter != null)
-            {
-                // Evade tiene prioridad absoluta sobre los comportamientos de flocking.
-                lastThreatPosition = detectedHunter.transform.position;
-                evadeMemoryTimer = evadeMemoryDuration;
-                state = BoidState.Evading;
-            }
-            else if (evadeMemoryTimer > 0f)
-            {
-                // Memoria de huida: sigue escapando del último punto donde vio al Cazador.
-                // Sin esto se detenía justo al salir de su rango de visión y la cohesión
-                // lo devolvía al borde, quedándose "al margen" del Cazador.
-                evadeMemoryTimer = Mathf.Max(0f, evadeMemoryTimer - dt);
-                state = BoidState.Evading;
-            }
-            else
-            {
-                bool targetValid = targetInterest != null && targetInterest.IsAvailable &&
-                                   AgentMath.FlatSqrDistance(transform.position, targetInterest.transform.position) <=
-                                   interestSightRadius * interestSightRadius * 1.7f;
-
-                if (!targetValid) targetInterest = SelectInterest();
-
-                if (targetInterest == null)
-                {
-                    state = BoidState.Flocking;
-                }
-                else
-                {
-                    float sqrDistance = AgentMath.FlatSqrDistance(transform.position, targetInterest.transform.position);
-                    state = sqrDistance <= interactionDistance * interactionDistance ? BoidState.Interacting : BoidState.Arriving;
-                }
-            }
-
-            if (previous != state)
-            {
-                interactionTimer = 0f;
-                LogEvent($"cambia a {state}");
-            }
-        }
-
-        private InterestObject SelectInterest()
+        internal InterestObject SelectInterest()
         {
             InterestObject best = null;
             float bestDistance = float.MaxValue;

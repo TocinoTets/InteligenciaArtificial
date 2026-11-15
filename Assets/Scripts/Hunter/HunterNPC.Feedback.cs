@@ -2,47 +2,43 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Feedback visual del Cazador: color según estado de la FSM, pulso de golpe,
-    /// etiqueta IMGUI de depuración, líneas de depuración y gizmos de rangos.
-    /// </summary>
     public partial class HunterNPC
     {
-        // ---------------- feedback ----------------
-        public void LogAction(string action)
-        {
-            LastAction = action;
-            recentActions.Add(action);
-            while (recentActions.Count > 5) recentActions.RemoveAt(0);
-
-            Debug.Log($"[Cazador][{(fsm != null ? fsm.CurrentId.ToString() : "Init")}] {action}", this);
-        }
+        private const float MeleeFlashDuration = 0.35f;
+        private static readonly Color RangeGizmoColor = new Color(1f, 0.6f, 0.1f, 0.5f);
 
         public Color StateColor(HunterStateId id)
         {
             switch (id)
             {
-                case HunterStateId.Attack: return attackColor;
+                case HunterStateId.Hunt: return huntColor;
                 case HunterStateId.Gather: return gatherColor;
+                case HunterStateId.Rest: return restColor;
                 default: return patrolColor;
             }
         }
 
         private void UpdateVisual()
         {
-            if (bodyRenderer != null)
-            {
-                Material material = bodyRenderer.sharedMaterial;
-                if (material != null && materialProperties != null)
-                {
-                    int propertyId = material.HasProperty(BaseColorId) ? BaseColorId : ColorId;
-                    materialProperties.SetColor(propertyId, StateColor(fsm.CurrentId));
-                    bodyRenderer.SetPropertyBlock(materialProperties);
-                }
-            }
+            ApplyStateColor();
+            ApplyMeleePulse();
+        }
 
-            // Pulso al concretar un ataque cuerpo a cuerpo.
-            float pulse = meleePulse > 0f ? Mathf.Sin(Mathf.Clamp01(meleePulse / 0.3f) * Mathf.PI) : 0f;
+        private void ApplyStateColor()
+        {
+            if (bodyRenderer == null || materialProperties == null) return;
+
+            Material material = bodyRenderer.sharedMaterial;
+            if (material == null) return;
+
+            int propertyId = material.HasProperty(BaseColorId) ? BaseColorId : ColorId;
+            materialProperties.SetColor(propertyId, StateColor(fsm.CurrentId));
+            bodyRenderer.SetPropertyBlock(materialProperties);
+        }
+
+        private void ApplyMeleePulse()
+        {
+            float pulse = meleePulse > 0f ? Mathf.Sin(Mathf.Clamp01(meleePulse / MeleePulseDuration) * Mathf.PI) : 0f;
             transform.localScale = baseScale * (1f + 0.25f * pulse);
         }
 
@@ -52,70 +48,45 @@ namespace IA.Agents
 
             Vector3 origin = transform.position + Vector3.up;
 
-            if (closestVisibleBoid != null)
-                Debug.DrawLine(origin, closestVisibleBoid.transform.position + Vector3.up, attackColor);
-
-            if (detectedDeadBoid != null)
-                Debug.DrawLine(origin, detectedDeadBoid.transform.position + Vector3.up, gatherColor);
-
-            if (waypoints != null && waypoints.Length > 1)
-            {
-                for (int i = 0; i < waypoints.Length; i++)
-                {
-                    if (waypoints[i] == null) continue;
-                    Transform next = waypoints[(i + 1) % waypoints.Length];
-                    if (next != null) Debug.DrawLine(waypoints[i].position, next.position, patrolColor);
-                }
-            }
-
-            if (lastMeleeTarget != null && Time.time - lastMeleeTime < 0.35f)
-                Debug.DrawLine(origin, lastMeleeTarget.transform.position + Vector3.up, Color.white);
+            DrawPreyLine(origin);
+            DrawDeadBoidLine(origin);
+            DrawWaypointPath();
+            DrawMeleeFlash(origin);
         }
 
-        private void OnGUI()
+        private void DrawPreyLine(Vector3 origin)
         {
-            if (!showDebugInfo) return;
-            label.Draw(transform.position + Vector3.up * 2.6f, BuildLabelText(), StateColor(fsm.CurrentId), 270f, 150f, 12);
+            if (fsm.CurrentId != HunterStateId.Hunt) return;
+
+            Vector3 target = currentPrey != null ? currentPrey.Position : lastKnownPreyPosition;
+            Debug.DrawLine(origin, target + Vector3.up, huntColor);
         }
 
-        private string BuildLabelText()
+        private void DrawDeadBoidLine(Vector3 origin)
         {
-            textBuilder.Length = 0;
-            textBuilder.Append("CAZADOR  [").Append(fsm.CurrentId).Append("]  ").Append(fsm.TimeInState.ToString("0.0")).Append("s\n");
-            textBuilder.Append("TBA ").Append(tba.ToString("0.0")).Append("s → ");
-            textBuilder.Append(IsAttackReady ? "LISTO" : $"faltan {(tba - attackTimer):0.0}s").Append('\n');
-            textBuilder.Append("Range ").Append(rangeAttackRadius.ToString("0.0"));
-            textBuilder.Append(" | Melee ").Append(meleeAttackRadius.ToString("0.0"));
-            textBuilder.Append(" | visión ").Append(perceptionRadius.ToString("0.0")).Append('\n');
+            if (detectedDeadBoid == null) return;
+            Debug.DrawLine(origin, detectedDeadBoid.transform.position + Vector3.up, gatherColor);
+        }
 
-            textBuilder.Append("objetivo: ");
-            if (closestVisibleBoid != null)
+        private void DrawWaypointPath()
+        {
+            if (waypoints == null || waypoints.Length < 2) return;
+
+            for (int i = 0; i < waypoints.Length; i++)
             {
-                float distance = AgentMath.FlatDistance(transform.position, closestVisibleBoid.transform.position);
-                textBuilder.Append(closestVisibleBoid.name).Append(" (").Append(distance.ToString("0.0")).Append(" m, vida ")
-                           .Append(closestVisibleBoid.Health.ToString("0")).Append(')');
+                Transform current = waypoints[i];
+                Transform next = waypoints[(i + 1) % waypoints.Length];
+                if (current != null && next != null) Debug.DrawLine(current.position, next.position, patrolColor);
             }
-            else textBuilder.Append("ninguno");
+        }
 
-            textBuilder.Append("\ndetectados: ").Append(detectedBoids.Count);
-            textBuilder.Append(" | eliminado: ").Append(detectedDeadBoid != null ? detectedDeadBoid.name : "-");
-            textBuilder.Append("\nacción: ").Append(LastAction);
-
-            if (fsm.CurrentId == HunterStateId.Gather && ActionProgress > 0f)
-                textBuilder.Append("\nrecolección: ").Append((ActionProgress * 100f).ToString("0")).Append('%');
-
-            textBuilder.Append('\n');
-            for (int i = recentActions.Count - 1; i >= 0; i--) textBuilder.Append(recentActions[i]).Append('\n');
-
-            return textBuilder.ToString();
+        private void DrawMeleeFlash(Vector3 origin)
+        {
+            if (lastMeleeTarget == null || Time.time - lastMeleeTime >= MeleeFlashDuration) return;
+            Debug.DrawLine(origin, lastMeleeTarget.transform.position + Vector3.up, Color.white);
         }
 
         private void OnDrawGizmos()
-        {
-            if (Application.isPlaying) DrawRanges();
-        }
-
-        private void OnDrawGizmosSelected()
         {
             DrawRanges();
         }
@@ -123,12 +94,12 @@ namespace IA.Agents
         private void DrawRanges()
         {
             Gizmos.color = new Color(patrolColor.r, patrolColor.g, patrolColor.b, 0.3f);
-            Gizmos.DrawWireSphere(transform.position, perceptionRadius);
+            Gizmos.DrawWireSphere(transform.position, visionRadius);
 
-            Gizmos.color = new Color(1f, 0.6f, 0.1f, 0.5f);
+            Gizmos.color = RangeGizmoColor;
             Gizmos.DrawWireSphere(transform.position, rangeAttackRadius);
 
-            Gizmos.color = new Color(attackColor.r, attackColor.g, attackColor.b, 0.8f);
+            Gizmos.color = new Color(huntColor.r, huntColor.g, huntColor.b, 0.8f);
             Gizmos.DrawWireSphere(transform.position, meleeAttackRadius);
         }
     }
