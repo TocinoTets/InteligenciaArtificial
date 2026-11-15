@@ -2,13 +2,8 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Percepción del Cazador: una única consulta de física sobre su radio de percepción.
-    /// No hay información compartida con los boids ni consultas globales de escena.
-    /// </summary>
     public partial class HunterNPC
     {
-        // ---------------- sensores ----------------
         private void Sense()
         {
             detectedBoids.Clear();
@@ -18,7 +13,7 @@ namespace IA.Agents
             float closestAliveDistance = float.MaxValue;
             float closestDeadDistance = float.MaxValue;
 
-            int count = Physics.OverlapSphereNonAlloc(transform.position, Mathf.Max(perceptionRadius, rangeAttackRadius), overlapBuffer);
+            int count = Physics.OverlapSphereNonAlloc(transform.position, visionRadius, overlapBuffer);
 
             for (int i = 0; i < count; i++)
             {
@@ -29,7 +24,7 @@ namespace IA.Agents
                 if (boid == null) continue;
 
                 float distance = AgentMath.FlatDistance(transform.position, boid.transform.position);
-                if (distance > perceptionRadius) continue;
+                if (distance > visionRadius) continue;
 
                 if (boid.IsAlive)
                 {
@@ -46,6 +41,11 @@ namespace IA.Agents
                     detectedDeadBoid = boid;
                 }
             }
+        }
+
+        public BoidAgent SelectPrey()
+        {
+            return closestVisibleBoid;
         }
     }
 }

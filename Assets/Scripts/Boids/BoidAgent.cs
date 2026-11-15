@@ -1,23 +1,8 @@
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 namespace IA.Agents
 {
-    /// <summary>
-    /// Agente autónomo tipo Boid: Separation, Alignment, Cohesion, Evade y Arrive.
-    ///
-    /// Cada agente decide EXCLUSIVAMENTE con la información que obtienen sus propios
-    /// sensores (Physics.OverlapSphere sobre sus radios locales). No existe controlador
-    /// global ni líder: ningún agente conoce la posición/velocidad de un Boid que esté
-    /// fuera de su rango de percepción.
-    ///
-    /// El comportamiento se reparte en archivos parciales:
-    ///   BoidAgent.Sensing.cs   → sensores locales y decisión de estado
-    ///   BoidAgent.Steering.cs  → actuadores: steering, wrap de la arena y anti-superposición
-    ///   BoidAgent.Lifecycle.cs → vida, muerte, recolección y reaparición
-    ///   BoidAgent.Feedback.cs  → feedback visual y depuración
-    /// </summary>
     [RequireComponent(typeof(Collider))]
     public partial class BoidAgent : MonoBehaviour
     {
@@ -55,7 +40,8 @@ namespace IA.Agents
         [SerializeField] private float minSeparationDistance = 1.4f;
 
         [Header("Vida e interacción")]
-        [SerializeField] private float maxHealth = 50f;
+        [Tooltip("Golpes que soporta el Boid. Melee = 2 golpes, a distancia = 1 golpe.")]
+        [SerializeField] private int maxHits = 2;
         [SerializeField] private float interactionDistance = 2f;
         [SerializeField] private float interactionInterval = 1f;
         [SerializeField] private float interactionDamage = 25f;
@@ -65,30 +51,25 @@ namespace IA.Agents
         [SerializeField] private float arenaHalfExtent = 22f;
 
         [Header("Feedback visual")]
-        [SerializeField] private bool showDebugInfo = false;
         [SerializeField] private bool showDebugLines = true;
         [SerializeField] private Material flockingMaterial;
         [SerializeField] private Material evadingMaterial;
         [SerializeField] private Material interactingMaterial;
         [SerializeField] private Material deadMaterial;
 
-        // ---------------- estado interno ----------------
         private readonly List<BoidAgent> neighbors = new List<BoidAgent>(16);
         private readonly List<BoidAgent> deadNeighbors = new List<BoidAgent>(8);
         private readonly List<InterestObject> visibleInterests = new List<InterestObject>(8);
-        private readonly List<string> recentEvents = new List<string>(4);
         private readonly Collider[] overlapBuffer = new Collider[64];
-        private readonly AgentLabel label = new AgentLabel();
-        private readonly StringBuilder textBuilder = new StringBuilder(320);
 
         private Collider bodyCollider;
         private Renderer bodyRenderer;
         private HunterNPC detectedHunter;
         private Vector3 lastThreatPosition;
         private InterestObject targetInterest;
-        private BoidState state = BoidState.Flocking;
+        private BoidFSM fsm;
         private Vector3 velocity;
-        private float health;
+        private int hitsTaken;
         private float interactionTimer;
         private float respawnTimer;
         private float wanderAngle;
@@ -96,18 +77,23 @@ namespace IA.Agents
         private float evadeMemoryTimer;
 
         public int AgentId => agentId;
-        public BoidState State => state;
-        public float Health => health;
-        public float MaxHealth => maxHealth;
+        public BoidFSM FSM => fsm;
+        public Vector3 Position => transform.position;
+        public BoidStateId State => fsm.CurrentId;
+        public int HitsTaken => hitsTaken;
+        public int MaxHits => maxHits;
+        public int RemainingHits => Mathf.Max(0, maxHits - hitsTaken);
         public Vector3 Velocity => velocity;
-        public bool IsAlive => state != BoidState.Dead && state != BoidState.Respawning;
-        public bool IsHarvestable => state == BoidState.Dead;
+        public bool IsAlive => fsm.CurrentId != BoidStateId.Dead && fsm.CurrentId != BoidStateId.Respawning;
+        public bool IsHarvestable => fsm.CurrentId == BoidStateId.Dead;
         public HunterNPC DetectedHunter => detectedHunter;
         public InterestObject TargetInterest => targetInterest;
         public IReadOnlyList<BoidAgent> Neighbors => neighbors;
-        public string LastEvent { get; private set; } = "-";
 
-        /// <summary>Configuración aplicada por el generador de escena (materiales, id, límites del escenario).</summary>
+        internal float InteractionDistance => interactionDistance;
+        internal float InterestSightRadius => interestSightRadius;
+        internal void SetTargetInterest(InterestObject value) => targetInterest = value;
+
         public void Configure(int newAgentId, float newArenaHalfExtent, Material newFlocking, Material newEvading, Material newInteracting, Material newDead)
         {
             agentId = newAgentId;
@@ -123,27 +109,32 @@ namespace IA.Agents
             bodyCollider = GetComponent<Collider>();
             bodyRenderer = GetComponentInChildren<Renderer>();
             groundY = transform.position.y;
-            health = maxHealth;
+            hitsTaken = 0;
             wanderAngle = Random.Range(0f, 360f);
-            LogEvent("inicia (Flocking)");
+
+            fsm = new BoidFSM();
+            fsm.Register(new BoidFlockingState(this));
+            fsm.Register(new BoidEvadingState(this));
+            fsm.Register(new BoidArrivingState(this));
+            fsm.Register(new BoidInteractingState(this));
+            fsm.Register(new BoidDeadState(this));
+            fsm.Register(new BoidRespawningState(this));
+            fsm.ChangeState(BoidStateId.Flocking);
         }
 
         private void Update()
         {
             float dt = Time.deltaTime;
 
-            if (state == BoidState.Dead || state == BoidState.Respawning)
+            if (fsm.CurrentId == BoidStateId.Dead || fsm.CurrentId == BoidStateId.Respawning)
             {
-                TickInactive(dt);
+                fsm.Tick(dt);
                 DrawDebugLines();
                 return;
             }
 
             Sense();
-            UpdateState(dt);
-            ApplySteering(dt);
-            ResolveOverlaps();
-            TickInteraction(dt);
+            fsm.Tick(dt);
             UpdateVisual();
             DrawDebugLines();
         }
