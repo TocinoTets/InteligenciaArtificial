@@ -1,19 +1,28 @@
 namespace IA.Agents
 {
-    public class BoidEvadeState : BoidState
+    public class BoidEvadingState : BoidState
     {
-        public BoidEvadeState(BoidAgent boid) : base(boid) { }
+        public BoidEvadingState(BoidAgent boid) : base(boid) { }
+        public override BoidStateId Id => BoidStateId.Evading;
 
-        public override BoidStateId Id => BoidStateId.Evade;
-
-        public override bool TryGetTransition(out BoidStateId next)
+        public override void Tick(float deltaTime)
         {
-            if (boid.SeesHunter) return Stay(out next);
-            return GoTo(ResolveCalmState(), out next);
-        }
+            if (TryDie()) return;
 
-        public override void Execute(float deltaTime)
-        {
+            if (boid.DetectedHunter != null)
+            {
+                boid.RefreshThreatMemory(boid.DetectedHunter.transform.position);
+            }
+            else
+            {
+                boid.TickThreatMemory(deltaTime);
+                if (!boid.HasThreatMemory)
+                {
+                    boid.FSM.ChangeState(BoidStateId.Flocking);
+                    return;
+                }
+            }
+
             boid.StepEvading(deltaTime);
         }
     }

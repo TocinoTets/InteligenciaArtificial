@@ -3,7 +3,6 @@ namespace IA.Agents
     public class BoidDeadState : BoidState
     {
         public BoidDeadState(BoidAgent boid) : base(boid) { }
-
         public override BoidStateId Id => BoidStateId.Dead;
 
         public override void Enter()
@@ -11,12 +10,9 @@ namespace IA.Agents
             boid.StopForDeath();
         }
 
-        public override bool TryGetTransition(out BoidStateId next)
+        public override void Tick(float deltaTime)
         {
-            if (boid.WasHarvested) return GoTo(BoidStateId.Respawn, out next);
-            return Stay(out next);
+            if (boid.WasHarvested) boid.FSM.ChangeState(BoidStateId.Respawning);
         }
-
-        public override void Execute(float deltaTime) { }
     }
 }
