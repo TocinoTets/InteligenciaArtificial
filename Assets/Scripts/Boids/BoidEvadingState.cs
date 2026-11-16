@@ -7,6 +7,8 @@ namespace IA.Agents
 
         public override void Tick(float deltaTime)
         {
+            if (TryDie()) return;
+
             if (boid.DetectedHunter != null)
             {
                 boid.RefreshThreatMemory(boid.DetectedHunter.transform.position);

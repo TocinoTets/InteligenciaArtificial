@@ -9,8 +9,20 @@ namespace IA.Agents
         {
             if (bodyRenderer == null) return;
 
-            Material material = MaterialForState(fsm.CurrentId);
+            BoidStateId current = fsm.CurrentId;
+            Material material = MaterialForState(current);
             if (material != null) bodyRenderer.sharedMaterial = material;
+
+            if (current != BoidStateId.Arriving)
+            {
+                bodyRenderer.SetPropertyBlock(null);
+                return;
+            }
+
+            tintBlock ??= new MaterialPropertyBlock();
+            Material shared = bodyRenderer.sharedMaterial;
+            tintBlock.SetColor(shared != null && shared.HasProperty("_BaseColor") ? "_BaseColor" : "_Color", seekColor);
+            bodyRenderer.SetPropertyBlock(tintBlock);
         }
 
         private Material MaterialForState(BoidStateId current)

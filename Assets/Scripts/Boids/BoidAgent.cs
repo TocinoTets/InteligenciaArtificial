@@ -56,6 +56,7 @@ namespace IA.Agents
         [SerializeField] private Material evadingMaterial;
         [SerializeField] private Material interactingMaterial;
         [SerializeField] private Material deadMaterial;
+        [SerializeField] private Color seekColor = new Color(0.2f, 0.9f, 1f);
 
         private readonly List<BoidAgent> neighbors = new List<BoidAgent>(16);
         private readonly List<BoidAgent> deadNeighbors = new List<BoidAgent>(8);
@@ -75,6 +76,8 @@ namespace IA.Agents
         private float wanderAngle;
         private float groundY;
         private float evadeMemoryTimer;
+        private bool harvested;
+        private MaterialPropertyBlock tintBlock;
 
         public int AgentId => agentId;
         public BoidFSM FSM => fsm;
@@ -84,8 +87,8 @@ namespace IA.Agents
         public int MaxHits => maxHits;
         public int RemainingHits => Mathf.Max(0, maxHits - hitsTaken);
         public Vector3 Velocity => velocity;
-        public bool IsAlive => fsm.CurrentId != BoidStateId.Dead && fsm.CurrentId != BoidStateId.Respawning;
-        public bool IsHarvestable => fsm.CurrentId == BoidStateId.Dead;
+        public bool IsAlive => fsm.CurrentId != BoidStateId.Dead && fsm.CurrentId != BoidStateId.Respawning && hitsTaken < maxHits;
+        public bool IsHarvestable => fsm.CurrentId == BoidStateId.Dead && !harvested;
         public HunterNPC DetectedHunter => detectedHunter;
         public InterestObject TargetInterest => targetInterest;
         public IReadOnlyList<BoidAgent> Neighbors => neighbors;

@@ -15,6 +15,13 @@ namespace IA.Agents
         public abstract void Tick(float deltaTime);
         public virtual void Exit() { }
 
+        protected bool TryDie()
+        {
+            if (!boid.IsOutOfHits) return false;
+            boid.FSM.ChangeState(BoidStateId.Dead);
+            return true;
+        }
+
         protected bool TryEvade()
         {
             if (boid.DetectedHunter == null) return false;

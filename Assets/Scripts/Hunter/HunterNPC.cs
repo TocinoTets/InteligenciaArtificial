@@ -13,12 +13,12 @@ namespace IA.Agents
         [Tooltip("TBA - Time Between Attacks: tiempo mínimo entre ataques (segundos).")]
         [SerializeField] private float tba = 3f;
         [Tooltip("RangeAttackRadius: distancia máxima para un ataque a distancia (1 golpe).")]
-        [SerializeField] private float rangeAttackRadius = 12f;
+        [SerializeField] private float rangeAttackRadius = 6f;
         [Tooltip("MeleeAttackRadius: distancia máxima para un ataque cuerpo a cuerpo (2 golpes). Menor que RangeAttackRadius.")]
         [SerializeField] private float meleeAttackRadius = 2.6f;
         [Tooltip("VisionRadius: rango de percepción para detectar Boids vivos y eliminados.")]
         [FormerlySerializedAs("perceptionRadius")]
-        [SerializeField] private float visionRadius = 18f;
+        [SerializeField] private float visionRadius = 10f;
         [Tooltip("MaxEnergy: energía máxima del Cazador.")]
         [SerializeField] private float maxEnergy = 100f;
         [Tooltip("Energy: energía actual del Cazador. Al iniciar se llena hasta MaxEnergy.")]
@@ -31,7 +31,7 @@ namespace IA.Agents
         [SerializeField] private float restEnergyRechargePerSecond = 25f;
 
         [Header("Movimiento")]
-        [SerializeField] private float moveSpeed = 6f;
+        [SerializeField] private float moveSpeed = 10f;
         [SerializeField] private float acceleration = 16f;
         [Tooltip("Multiplicador de la aceleración al frenar.")]
         [SerializeField] private float brakeMultiplier = 1.4f;

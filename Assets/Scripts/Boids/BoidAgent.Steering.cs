@@ -200,6 +200,8 @@ namespace IA.Agents
 
             for (int i = 0; i < neighbors.Count; i++) correction += PushAway(neighbors[i].transform.position);
             for (int i = 0; i < deadNeighbors.Count; i++) correction += PushAway(deadNeighbors[i].transform.position);
+            for (int i = 0; i < visibleInterests.Count; i++)
+                if (visibleInterests[i] != null) correction += PushAway(visibleInterests[i].transform.position);
             if (detectedHunter != null) correction += PushAway(detectedHunter.transform.position);
 
             if (correction.sqrMagnitude < 1e-8f) return;

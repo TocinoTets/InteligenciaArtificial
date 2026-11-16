@@ -7,7 +7,7 @@ namespace IA.Agents
 
         public override void Tick(float deltaTime)
         {
-            if (TryEvade()) return;
+            if (TryDie() || TryEvade()) return;
 
             InterestObject target = boid.TargetInterest;
             bool targetValid = target != null && target.IsAvailable &&

@@ -9,27 +9,30 @@ namespace IA.Agents
             if (!IsAlive || hits <= 0) return;
 
             hitsTaken = Mathf.Min(maxHits, hitsTaken + hits);
-
-            if (hitsTaken >= maxHits) fsm.ChangeState(BoidStateId.Dead);
         }
+
+        internal bool IsOutOfHits => hitsTaken >= maxHits;
+        internal bool WasHarvested => harvested;
 
         internal void StopForDeath()
         {
             velocity = Vector3.zero;
+            harvested = false;
             SetTargetInterest(null);
             UpdateVisual();
         }
 
         public bool Harvest()
         {
-            if (fsm.CurrentId != BoidStateId.Dead) return false;
-            fsm.ChangeState(BoidStateId.Respawning);
+            if (!IsHarvestable) return false;
+            harvested = true;
             return true;
         }
 
         internal void BeginRespawnWait()
         {
             respawnTimer = 0f;
+            harvested = false;
             velocity = Vector3.zero;
             SetVisible(false);
         }
