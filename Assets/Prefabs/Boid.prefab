@@ -141,17 +141,25 @@ MonoBehaviour:
   evadeWeight: 5
   arriveWeight: 2.6
   wanderWeight: 0.8
-  evadeMemoryDuration: 2.5
-  minSeparationDistance: 1.4
-  maxHealth: 50
+  deadSeparationFactor: 0.6
+  evadeMaxPrediction: 1.5
+  wanderJitter: 60
+  wanderSpeedFactor: 0.6
+  arriveSlowingRadius: 5
+  arriveStopDistance: 1.6
   interactionDistance: 2
+  consumeExitMargin: 0.5
   interactionInterval: 1
   interactionDamage: 25
+  minSeparationDistance: 1.4
+  maxHits: 2
   respawnDelay: 6
   arenaHalfExtent: 25
-  showDebugInfo: 0
   showDebugLines: 1
+  showRadiiGizmos: 1
+  showStateLabel: 1
   flockingMaterial: {fileID: 2100000, guid: 3d965cf6b8ec0364b9d0132d8139bf83, type: 2}
   evadingMaterial: {fileID: 2100000, guid: e88f06d73ad69b34eb1820214a1b57f0, type: 2}
+  seekObjectMaterial: {fileID: 2100000, guid: 275b6d77243711b46abd4b857d713142, type: 2}
   interactingMaterial: {fileID: 2100000, guid: 8fde68a4b952a8f41bb4fcc58f874ee2, type: 2}
   deadMaterial: {fileID: 2100000, guid: 2f16ab8fddd538f4c8c3acded0f7597b, type: 2}

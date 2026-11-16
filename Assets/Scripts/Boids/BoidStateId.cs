@@ -3,10 +3,10 @@ namespace IA.Agents
     public enum BoidStateId
     {
         Flocking,
-        Evading,
-        Arriving,
-        Interacting,
+        Evade,
+        SeekObject,
+        Consume,
         Dead,
-        Respawning
+        Respawn
     }
 }

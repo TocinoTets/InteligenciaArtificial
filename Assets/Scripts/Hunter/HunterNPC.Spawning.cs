@@ -2,28 +2,42 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-
     public partial class HunterNPC
     {
+        private const int MaxSpawnAttempts = 10;
+        private const float MinSpawnDistanceFromHunter = 6f;
+
         public int ActiveInterestObjectCount()
         {
-            InterestObject[] found = Object.FindObjectsByType<InterestObject>(FindObjectsSortMode.None);
-            int active = 0;
-            for (int i = 0; i < found.Length; i++)
-                if (found[i] != null && found[i].IsAvailable) active++;
-            return active;
+            return InterestObject.ActiveCount;
         }
 
         public bool SpawnInterestObject()
         {
             if (interestObjectPrefab == null) return false;
 
-            Vector3 position = AgentMath.RandomPointInSquare(spawnAreaHalfExtent, InterestObjectY);
-            for (int attempt = 0; attempt < 10 && AgentMath.FlatDistance(position, transform.position) < 6f; attempt++)
-                position = AgentMath.RandomPointInSquare(spawnAreaHalfExtent, InterestObjectY);
-
-            Instantiate(interestObjectPrefab, position, Quaternion.identity);
+            Instantiate(interestObjectPrefab, FindSpawnPosition(), Quaternion.identity);
             return true;
+        }
+
+        private Vector3 FindSpawnPosition()
+        {
+            Vector3 position = RandomSpawnPoint();
+
+            for (int attempt = 0; attempt < MaxSpawnAttempts && IsTooCloseToHunter(position); attempt++)
+                position = RandomSpawnPoint();
+
+            return position;
+        }
+
+        private Vector3 RandomSpawnPoint()
+        {
+            return AgentMath.RandomPointInSquare(spawnAreaHalfExtent, InterestObjectY);
+        }
+
+        private bool IsTooCloseToHunter(Vector3 position)
+        {
+            return AgentMath.FlatDistance(position, transform.position) < MinSpawnDistanceFromHunter;
         }
     }
 }
