@@ -426,7 +426,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 288620678}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -653,7 +653,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 434116936}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -743,7 +743,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 484410128}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -833,7 +833,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 512437573}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1053,7 +1053,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 634231484}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1657,7 +1657,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1551868043}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1779,7 +1779,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1689829457}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1901,7 +1901,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1963106365}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -2212,10 +2212,16 @@ MonoBehaviour:
   tba: 3
   rangeAttackRadius: 12
   meleeAttackRadius: 2.6
-  perceptionRadius: 18
+  visionRadius: 18
+  maxEnergy: 100
+  energy: 100
+  huntEnergyDrainPerSecond: 8
+  restEnergyRechargePerSecond: 25
   moveSpeed: 6
   acceleration: 16
+  brakeMultiplier: 1.4
   turnSpeed: 7
+  pursuitMaxPrediction: 1.5
   waypoints:
   - {fileID: 540611003}
   - {fileID: 1651208882}
@@ -2227,10 +2233,10 @@ MonoBehaviour:
   - {fileID: 522123310}
   waypointTolerance: 1.2
   loopMode: 1
-  attackWindup: 0.45
   meleeStopDistance: 1.7
-  meleeDamage: 34
-  rangedDamage: 20
+  lastKnownPositionTolerance: 1
+  meleeHits: 2
+  rangedHits: 1
   projectilePrefab: {fileID: 4395372232642553609, guid: 13a3809e25841ac45be50c83dff0de34, type: 3}
   projectileSpeed: 18
   interestObjectPrefab: {fileID: 5190288213885325676, guid: d78a3b3c07fa7094689d55e61a9070c5, type: 3}
@@ -2240,11 +2246,12 @@ MonoBehaviour:
   gatherDuration: 2.5
   gatherRadius: 1.8
   arenaHalfExtent: 25
-  showDebugInfo: 0
   showDebugLines: 1
+  showStateLabel: 1
   patrolColor: {r: 0.25, g: 0.7, b: 1, a: 1}
-  attackColor: {r: 1, g: 0.15, b: 0.15, a: 1}
+  huntColor: {r: 1, g: 0.15, b: 0.15, a: 1}
   gatherColor: {r: 0.85, g: 0.3, b: 0.95, a: 1}
+  restColor: {r: 1, g: 0.85, b: 0.2, a: 1}
 --- !u!23 &2122739322
 MeshRenderer:
   m_ObjectHideFlags: 0

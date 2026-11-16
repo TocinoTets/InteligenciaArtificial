@@ -52,7 +52,7 @@ namespace IA.Agents
 
             if (collectTimer < npc.GatherDuration) return;
 
-            target.Harvest();
+            target.MarkAsHarvested();
             completed = true;
         }
 

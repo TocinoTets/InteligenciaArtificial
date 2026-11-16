@@ -5,7 +5,7 @@ using UnityEngine.Serialization;
 namespace IA.Agents
 {
     [RequireComponent(typeof(Collider))]
-    public partial class HunterNPC : MonoBehaviour
+    public partial class HunterNPC : MonoBehaviour, IStateLabelSource
     {
         private const float InterestObjectY = 0.8f;
 
@@ -72,6 +72,8 @@ namespace IA.Agents
 
         [Header("Feedback visual")]
         [SerializeField] private bool showDebugLines = true;
+        [Tooltip("Muestra sobre el Cazador su estado, presa, energía y TBA.")]
+        [SerializeField] private bool showStateLabel = true;
         [SerializeField] private Color patrolColor = new Color(0.25f, 0.7f, 1f);
         [FormerlySerializedAs("attackColor")]
         [SerializeField] private Color huntColor = new Color(1f, 0.15f, 0.15f);
@@ -145,6 +147,8 @@ namespace IA.Agents
             baseScale = transform.localScale;
             energy = maxEnergy;
             attackTimer = 0f;
+
+            if (showStateLabel && GetComponent<AgentStateLabel>() == null) gameObject.AddComponent<AgentStateLabel>();
 
             fsm = new HunterFSM();
             fsm.Register(new HunterPatrolState(this));

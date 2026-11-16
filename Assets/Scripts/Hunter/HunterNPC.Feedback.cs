@@ -7,6 +7,42 @@ namespace IA.Agents
         private const float MeleeFlashDuration = 0.35f;
         private static readonly Color RangeGizmoColor = new Color(1f, 0.6f, 0.1f, 0.5f);
 
+        public string StateLabel
+        {
+            get
+            {
+                if (fsm == null) return string.Empty;
+                return $"{StateDetail()}\n{EnergyText()} | {AttackTimerText()}";
+            }
+        }
+
+        public Color StateLabelColor => StateColor(fsm != null ? fsm.CurrentId : HunterStateId.Patrol);
+
+        private string StateDetail()
+        {
+            switch (fsm.CurrentId)
+            {
+                case HunterStateId.Hunt:
+                    return currentPrey != null ? $"HUNT -> Boid #{currentPrey.AgentId}" : "HUNT -> última posición";
+                case HunterStateId.Gather:
+                    return $"GATHER {ActionProgress * 100f:0}%";
+                case HunterStateId.Rest:
+                    return "REST";
+                default:
+                    return "PATROL";
+            }
+        }
+
+        private string EnergyText()
+        {
+            return $"E {energy:0}/{maxEnergy:0}";
+        }
+
+        private string AttackTimerText()
+        {
+            return IsAttackReady ? "TBA listo" : $"TBA {Mathf.Max(0f, tba - attackTimer):0.0}s";
+        }
+
         public Color StateColor(HunterStateId id)
         {
             switch (id)

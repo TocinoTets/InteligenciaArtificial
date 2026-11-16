@@ -4,66 +4,69 @@ namespace IA.Agents
 {
     public partial class BoidAgent
     {
+        private bool wasHarvested;
+
+        public bool IsOutOfHits => hitsTaken >= maxHits;
+        public bool WasHarvested => wasHarvested;
+        public bool IsRespawnReady => respawnTimer >= respawnDelay;
+
         public void TakeHits(int hits)
         {
             if (!IsAlive || hits <= 0) return;
 
             hitsTaken = Mathf.Min(maxHits, hitsTaken + hits);
+        }
 
-            if (hitsTaken >= maxHits) fsm.ChangeState(BoidStateId.Dead);
+        public void MarkAsHarvested()
+        {
+            if (!IsHarvestable) return;
+
+            wasHarvested = true;
         }
 
         internal void StopForDeath()
         {
             velocity = Vector3.zero;
             SetTargetInterest(null);
-            UpdateVisual();
         }
 
-        public bool Harvest()
+        internal void BeginRespawn()
         {
-            if (fsm.CurrentId != BoidStateId.Dead) return false;
-            fsm.ChangeState(BoidStateId.Respawning);
-            return true;
-        }
-
-        internal void BeginRespawnWait()
-        {
+            wasHarvested = false;
             respawnTimer = 0f;
             velocity = Vector3.zero;
             SetVisible(false);
         }
 
-        internal void TickRespawnWait(float dt)
+        internal void TickRespawnTimer(float dt)
         {
             respawnTimer += dt;
-            if (respawnTimer < respawnDelay) return;
+        }
 
+        internal void RespawnAtRandomPosition()
+        {
             float half = Mathf.Max(2f, arenaHalfExtent - 2f);
             transform.position = AgentMath.RandomPointInSquare(half, groundY);
 
             hitsTaken = 0;
             velocity = Vector3.zero;
             SetVisible(true);
-            UpdateVisual();
-
-            fsm.ChangeState(BoidStateId.Flocking);
         }
 
-        internal void ResetInteractionTimer() => interactionTimer = 0f;
+        internal void ResetInteractionTimer()
+        {
+            interactionTimer = 0f;
+        }
 
         internal void TickInteraction(float dt)
         {
-            if (targetInterest == null) return;
+            if (!HasValidTarget) return;
 
             interactionTimer += dt;
             if (interactionTimer < interactionInterval) return;
 
             interactionTimer = 0f;
-
-            bool destroyed = targetInterest.ApplyDamage(interactionDamage);
-
-            if (destroyed) targetInterest = null;
+            targetInterest.ApplyDamage(interactionDamage);
         }
 
         private void SetVisible(bool visible)

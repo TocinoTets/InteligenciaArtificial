@@ -4,7 +4,7 @@ using UnityEngine;
 namespace IA.Agents
 {
     [RequireComponent(typeof(Collider))]
-    public partial class BoidAgent : MonoBehaviour
+    public partial class BoidAgent : MonoBehaviour, IStateLabelSource
     {
         [Header("Identidad")]
         [SerializeField] private int agentId = 1;
@@ -31,20 +31,38 @@ namespace IA.Agents
         [SerializeField] private float evadeWeight = 5f;
         [SerializeField] private float arriveWeight = 2.6f;
         [SerializeField] private float wanderWeight = 0.8f;
-        [Tooltip("Memoria de huida: segundos que el boid sigue escapando tras perder de vista al Cazador.")]
-        [SerializeField] private float evadeMemoryDuration = 2.5f;
-        [Tooltip("Distancia (m) a la que el boid da la huida por terminada: la fuerza se desvanece entre viewRadius y este valor.")]
-        [SerializeField] private float evadeSafeDistance = 18f;
+        [Tooltip("Multiplicador de Separation aplicado a los Boids muertos.")]
+        [SerializeField] private float deadSeparationFactor = 0.6f;
 
-        [Header("Anti-superposición")]
-        [SerializeField] private float minSeparationDistance = 1.4f;
+        [Header("Evade")]
+        [Tooltip("Máximo de segundos que se anticipa la posición futura del Cazador.")]
+        [SerializeField] private float evadeMaxPrediction = 1.5f;
 
-        [Header("Vida e interacción")]
-        [Tooltip("Golpes que soporta el Boid. Melee = 2 golpes, a distancia = 1 golpe.")]
-        [SerializeField] private int maxHits = 2;
+        [Header("Wander")]
+        [Tooltip("Grados por segundo que puede variar la dirección de deambular.")]
+        [SerializeField] private float wanderJitter = 60f;
+        [Tooltip("Fracción de la velocidad máxima usada al deambular.")]
+        [SerializeField, Range(0f, 1f)] private float wanderSpeedFactor = 0.6f;
+
+        [Header("Seek Object / Consume")]
+        [Tooltip("Distancia a la que Arrive empieza a desacelerar.")]
+        [SerializeField] private float arriveSlowingRadius = 5f;
+        [Tooltip("Distancia a la que Arrive termina de frenar. Menor que InteractionDistance.")]
+        [SerializeField] private float arriveStopDistance = 1.6f;
+        [Tooltip("Distancia máxima para empezar a consumir el objeto.")]
         [SerializeField] private float interactionDistance = 2f;
+        [Tooltip("Margen extra antes de abandonar Consume, para no alternar entre estados.")]
+        [SerializeField] private float consumeExitMargin = 0.5f;
         [SerializeField] private float interactionInterval = 1f;
         [SerializeField] private float interactionDamage = 25f;
+
+        [Header("Anti-superposición")]
+        [Tooltip("Distancia mínima entre centros de dos agentes.")]
+        [SerializeField] private float minSeparationDistance = 1.4f;
+
+        [Header("Vida")]
+        [Tooltip("Golpes que soporta el Boid. Melee = 2 golpes, a distancia = 1 golpe.")]
+        [SerializeField] private int maxHits = 2;
         [SerializeField] private float respawnDelay = 6f;
 
         [Header("Escenario")]
@@ -52,8 +70,15 @@ namespace IA.Agents
 
         [Header("Feedback visual")]
         [SerializeField] private bool showDebugLines = true;
+        [Tooltip("Dibuja siempre los radios de Separation, Alignment/Cohesion y visión.")]
+        [SerializeField] private bool showRadiiGizmos = true;
+        [Tooltip("Muestra sobre el Boid su estado y los golpes que le quedan.")]
+        [SerializeField] private bool showStateLabel = true;
         [SerializeField] private Material flockingMaterial;
         [SerializeField] private Material evadingMaterial;
+        [Tooltip("Material del estado Seek Object. Si está vacío usa el de Consume.")]
+        [SerializeField] private Material seekObjectMaterial;
+        [Tooltip("Material del estado Consume.")]
         [SerializeField] private Material interactingMaterial;
         [SerializeField] private Material deadMaterial;
 
@@ -65,7 +90,6 @@ namespace IA.Agents
         private Collider bodyCollider;
         private Renderer bodyRenderer;
         private HunterNPC detectedHunter;
-        private Vector3 lastThreatPosition;
         private InterestObject targetInterest;
         private BoidFSM fsm;
         private Vector3 velocity;
@@ -74,7 +98,6 @@ namespace IA.Agents
         private float respawnTimer;
         private float wanderAngle;
         private float groundY;
-        private float evadeMemoryTimer;
 
         public int AgentId => agentId;
         public BoidFSM FSM => fsm;
@@ -84,14 +107,12 @@ namespace IA.Agents
         public int MaxHits => maxHits;
         public int RemainingHits => Mathf.Max(0, maxHits - hitsTaken);
         public Vector3 Velocity => velocity;
-        public bool IsAlive => fsm.CurrentId != BoidStateId.Dead && fsm.CurrentId != BoidStateId.Respawning;
-        public bool IsHarvestable => fsm.CurrentId == BoidStateId.Dead;
+        public bool IsAlive => !IsOutOfHits && fsm.CurrentId != BoidStateId.Dead && fsm.CurrentId != BoidStateId.Respawn;
+        public bool IsHarvestable => fsm.CurrentId == BoidStateId.Dead && !wasHarvested;
         public HunterNPC DetectedHunter => detectedHunter;
         public InterestObject TargetInterest => targetInterest;
         public IReadOnlyList<BoidAgent> Neighbors => neighbors;
 
-        internal float InteractionDistance => interactionDistance;
-        internal float InterestSightRadius => interestSightRadius;
         internal void SetTargetInterest(InterestObject value) => targetInterest = value;
 
         public void Configure(int newAgentId, float newArenaHalfExtent, Material newFlocking, Material newEvading, Material newInteracting, Material newDead)
@@ -112,31 +133,44 @@ namespace IA.Agents
             hitsTaken = 0;
             wanderAngle = Random.Range(0f, 360f);
 
-            fsm = new BoidFSM();
+            if (showStateLabel && GetComponent<AgentStateLabel>() == null) gameObject.AddComponent<AgentStateLabel>();
+
+            fsm = new BoidFSM(this);
             fsm.Register(new BoidFlockingState(this));
-            fsm.Register(new BoidEvadingState(this));
-            fsm.Register(new BoidArrivingState(this));
-            fsm.Register(new BoidInteractingState(this));
+            fsm.Register(new BoidEvadeState(this));
+            fsm.Register(new BoidSeekObjectState(this));
+            fsm.Register(new BoidConsumeState(this));
             fsm.Register(new BoidDeadState(this));
-            fsm.Register(new BoidRespawningState(this));
-            fsm.ChangeState(BoidStateId.Flocking);
+            fsm.Register(new BoidRespawnState(this));
+            fsm.Start(BoidStateId.Flocking);
         }
 
         private void Update()
         {
             float dt = Time.deltaTime;
 
-            if (fsm.CurrentId == BoidStateId.Dead || fsm.CurrentId == BoidStateId.Respawning)
-            {
-                fsm.Tick(dt);
-                DrawDebugLines();
-                return;
-            }
+            if (IsAlive) Sense();
+            else ClearPerception();
 
-            Sense();
             fsm.Tick(dt);
             UpdateVisual();
             DrawDebugLines();
+        }
+
+        private void OnValidate()
+        {
+            perceptionRadius = Mathf.Max(0.2f, perceptionRadius);
+            separationRadius = Mathf.Clamp(separationRadius, 0.1f, perceptionRadius - 0.1f);
+            maxSpeed = Mathf.Max(0.1f, maxSpeed);
+            maxForce = Mathf.Max(0.1f, maxForce);
+            interactionDistance = Mathf.Max(0.2f, interactionDistance);
+            arriveStopDistance = Mathf.Clamp(arriveStopDistance, 0.1f, interactionDistance - 0.05f);
+            arriveSlowingRadius = Mathf.Max(arriveStopDistance + 0.1f, arriveSlowingRadius);
+            consumeExitMargin = Mathf.Max(0f, consumeExitMargin);
+            interactionInterval = Mathf.Max(0.05f, interactionInterval);
+            minSeparationDistance = Mathf.Max(0.1f, minSeparationDistance);
+            maxHits = Mathf.Max(1, maxHits);
+            respawnDelay = Mathf.Max(0f, respawnDelay);
         }
     }
 }

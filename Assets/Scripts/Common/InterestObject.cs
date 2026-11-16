@@ -2,21 +2,33 @@ using UnityEngine;
 
 namespace IA.Agents
 {
-
     public class InterestObject : MonoBehaviour
     {
+        private const float MinScaleFactor = 0.45f;
+
         [SerializeField] private float maxHealth = 100f;
         [Tooltip("0 = sin caducidad: sólo lo destruyen los Boids.")]
         [SerializeField] private float lifetime = 0f;
+        [Tooltip("Radio (m) que ocupa el objeto a tamaño completo. Los Boids lo usan para no superponerse.")]
+        [SerializeField] private float footprintRadius = 0.6f;
 
         private float age;
         private Vector3 initialScale;
+        private float scaleFactor = 1f;
+
+        public static int ActiveCount { get; private set; }
 
         public float MaxHealth => maxHealth;
         public float CurrentHealth { get; private set; }
         public float HealthNormalized => maxHealth <= 0f ? 0f : Mathf.Clamp01(CurrentHealth / maxHealth);
-
         public bool IsAvailable => CurrentHealth > 0f;
+        public float FootprintRadius => footprintRadius * scaleFactor;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetActiveCount()
+        {
+            ActiveCount = 0;
+        }
 
         private void Awake()
         {
@@ -24,11 +36,19 @@ namespace IA.Agents
             initialScale = transform.localScale;
         }
 
+        private void OnEnable()
+        {
+            ActiveCount++;
+        }
+
+        private void OnDisable()
+        {
+            ActiveCount = Mathf.Max(0, ActiveCount - 1);
+        }
+
         private void Update()
         {
-            if (lifetime <= 0f) return;
-            age += Time.deltaTime;
-            if (age >= lifetime) Destroy(gameObject);
+            TickLifetime(Time.deltaTime);
         }
 
         public bool ApplyDamage(float amount)
@@ -37,14 +57,28 @@ namespace IA.Agents
 
             CurrentHealth = Mathf.Max(0f, CurrentHealth - Mathf.Max(0f, amount));
 
-            if (CurrentHealth <= 0f)
+            if (!IsAvailable)
             {
                 Destroy(gameObject);
                 return true;
             }
 
-            transform.localScale = initialScale * Mathf.Lerp(0.45f, 1f, HealthNormalized);
+            UpdateScale();
             return false;
+        }
+
+        private void UpdateScale()
+        {
+            scaleFactor = Mathf.Lerp(MinScaleFactor, 1f, HealthNormalized);
+            transform.localScale = initialScale * scaleFactor;
+        }
+
+        private void TickLifetime(float deltaTime)
+        {
+            if (lifetime <= 0f) return;
+
+            age += deltaTime;
+            if (age >= lifetime) Destroy(gameObject);
         }
     }
 }
